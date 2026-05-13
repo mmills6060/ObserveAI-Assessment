@@ -11,6 +11,7 @@ import {defineSecret} from "firebase-functions/params";
 import {setGlobalOptions} from "firebase-functions";
 import {onRequest} from "firebase-functions/https";
 import * as logger from "firebase-functions/logger";
+import {appendNotionDatabaseRecord} from "./notion/append-database-record";
 import {getNotionDatabaseRecord} from "./notion/get-database-record";
 
 // Start writing functions
@@ -29,6 +30,13 @@ import {getNotionDatabaseRecord} from "./notion/get-database-record";
 setGlobalOptions({maxInstances: 10});
 
 const notionToken = defineSecret("NOTION_TOKEN");
+
+interface AppendNotionRecordRequestBody {
+  name?: unknown;
+  summary?: unknown;
+  sentiment?: unknown;
+  timestamp?: unknown;
+}
 
 export const getNotionRecord = onRequest(
   {secrets: [notionToken]},
@@ -64,6 +72,54 @@ export const getNotionRecord = onRequest(
     } catch (error) {
       logger.error("Failed to get Notion record", error);
       response.status(500).json({error: "Failed to get Notion record"});
+    }
+  }
+);
+
+export const appendNotionRecord = onRequest(
+  {secrets: [notionToken]},
+  async (request, response) => {
+    if (request.method !== "POST") {
+      response.status(405).json({error: "Method not allowed"});
+      return;
+    }
+
+    const {name, summary, sentiment, timestamp} =
+      request.body as AppendNotionRecordRequestBody;
+
+    if (typeof name !== "string" || !name) {
+      response.status(400).json({error: "Missing name"});
+      return;
+    }
+
+    if (typeof summary !== "string" || !summary) {
+      response.status(400).json({error: "Missing summary"});
+      return;
+    }
+
+    if (typeof sentiment !== "string" || !sentiment) {
+      response.status(400).json({error: "Missing sentiment"});
+      return;
+    }
+
+    if (typeof timestamp !== "string" || !timestamp) {
+      response.status(400).json({error: "Missing timestamp"});
+      return;
+    }
+
+    try {
+      const record = await appendNotionDatabaseRecord({
+        notionToken: notionToken.value(),
+        name,
+        summary,
+        sentiment,
+        timestamp,
+      });
+
+      response.status(201).json(record);
+    } catch (error) {
+      logger.error("Failed to append Notion record", error);
+      response.status(500).json({error: "Failed to append Notion record"});
     }
   }
 );
