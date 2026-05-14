@@ -11,6 +11,7 @@ import {defineSecret} from "firebase-functions/params";
 import {setGlobalOptions} from "firebase-functions";
 import {onRequest} from "firebase-functions/https";
 import * as logger from "firebase-functions/logger";
+import {AppError, ErrorResponseBody, toErrorResponse} from "./errors";
 import {appendNotionDatabaseRecord} from "./notion/append-database-record";
 import {getNotionDatabaseRecord} from "./notion/get-database-record";
 
@@ -30,6 +31,7 @@ import {getNotionDatabaseRecord} from "./notion/get-database-record";
 setGlobalOptions({maxInstances: 10});
 
 const notionToken = defineSecret("NOTION_TOKEN");
+const jsonContentType = "application/json";
 
 interface AppendNotionRecordRequestBody {
   name?: unknown;
@@ -38,20 +40,60 @@ interface AppendNotionRecordRequestBody {
   timestamp?: unknown;
 }
 
+interface JsonResponse {
+  status(statusCode: number): {
+    json(body: ErrorResponseBody): void;
+  };
+}
+
+/**
+ * Sends a normalized JSON error response.
+ *
+ * @param {JsonResponse} response HTTP response object.
+ * @param {unknown} error Error to convert.
+ * @param {string} fallbackMessage Message for unexpected failures.
+ */
+function sendErrorResponse(
+  response: JsonResponse,
+  error: unknown,
+  fallbackMessage: string
+): void {
+  const errorResponse = toErrorResponse(error, fallbackMessage);
+
+  response.status(errorResponse.statusCode).json(errorResponse.body);
+}
+
 export const getNotionRecord = onRequest(
   {secrets: [notionToken]},
   async (request, response) => {
+    response.setHeader("Content-Type", jsonContentType);
+
     if (request.method !== "GET") {
-      response.status(405).json({error: "Method not allowed"});
+      response.setHeader("Allow", "GET");
+      sendErrorResponse(
+        response,
+        new AppError({
+          code: "method_not_allowed",
+          message: "Method not allowed",
+          statusCode: 405,
+        }),
+        "Failed to get Notion record"
+      );
       return;
     }
 
     const phoneNumber = request.query.phoneNumber;
 
     if (typeof phoneNumber !== "string" || !phoneNumber) {
-      response.status(400).json({
-        error: "Missing phoneNumber query parameter",
-      });
+      sendErrorResponse(
+        response,
+        new AppError({
+          code: "missing_phone_number",
+          message: "Missing phoneNumber query parameter",
+          statusCode: 400,
+        }),
+        "Failed to get Notion record"
+      );
       return;
     }
 
@@ -62,16 +104,22 @@ export const getNotionRecord = onRequest(
       });
 
       if (!record) {
-        response.status(404).json({
-          error: "No matching Notion record found",
-        });
+        sendErrorResponse(
+          response,
+          new AppError({
+            code: "notion_record_not_found",
+            message: "No matching Notion record found",
+            statusCode: 404,
+          }),
+          "Failed to get Notion record"
+        );
         return;
       }
 
       response.status(200).json(record);
     } catch (error) {
       logger.error("Failed to get Notion record", error);
-      response.status(500).json({error: "Failed to get Notion record"});
+      sendErrorResponse(response, error, "Failed to get Notion record");
     }
   }
 );
@@ -79,8 +127,32 @@ export const getNotionRecord = onRequest(
 export const appendNotionRecord = onRequest(
   {secrets: [notionToken]},
   async (request, response) => {
+    response.setHeader("Content-Type", jsonContentType);
+
     if (request.method !== "POST") {
-      response.status(405).json({error: "Method not allowed"});
+      response.setHeader("Allow", "POST");
+      sendErrorResponse(
+        response,
+        new AppError({
+          code: "method_not_allowed",
+          message: "Method not allowed",
+          statusCode: 405,
+        }),
+        "Failed to append Notion record"
+      );
+      return;
+    }
+
+    if (!request.is(jsonContentType)) {
+      sendErrorResponse(
+        response,
+        new AppError({
+          code: "unsupported_media_type",
+          message: "Content-Type must be application/json",
+          statusCode: 415,
+        }),
+        "Failed to append Notion record"
+      );
       return;
     }
 
@@ -88,22 +160,54 @@ export const appendNotionRecord = onRequest(
       request.body as AppendNotionRecordRequestBody;
 
     if (typeof name !== "string" || !name) {
-      response.status(400).json({error: "Missing name"});
+      sendErrorResponse(
+        response,
+        new AppError({
+          code: "missing_name",
+          message: "Missing name",
+          statusCode: 400,
+        }),
+        "Failed to append Notion record"
+      );
       return;
     }
 
     if (typeof summary !== "string" || !summary) {
-      response.status(400).json({error: "Missing summary"});
+      sendErrorResponse(
+        response,
+        new AppError({
+          code: "missing_summary",
+          message: "Missing summary",
+          statusCode: 400,
+        }),
+        "Failed to append Notion record"
+      );
       return;
     }
 
     if (typeof sentiment !== "string" || !sentiment) {
-      response.status(400).json({error: "Missing sentiment"});
+      sendErrorResponse(
+        response,
+        new AppError({
+          code: "missing_sentiment",
+          message: "Missing sentiment",
+          statusCode: 400,
+        }),
+        "Failed to append Notion record"
+      );
       return;
     }
 
     if (typeof timestamp !== "string" || !timestamp) {
-      response.status(400).json({error: "Missing timestamp"});
+      sendErrorResponse(
+        response,
+        new AppError({
+          code: "missing_timestamp",
+          message: "Missing timestamp",
+          statusCode: 400,
+        }),
+        "Failed to append Notion record"
+      );
       return;
     }
 
@@ -119,7 +223,7 @@ export const appendNotionRecord = onRequest(
       response.status(201).json(record);
     } catch (error) {
       logger.error("Failed to append Notion record", error);
-      response.status(500).json({error: "Failed to append Notion record"});
+      sendErrorResponse(response, error, "Failed to append Notion record");
     }
   }
 );

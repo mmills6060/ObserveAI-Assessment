@@ -1,4 +1,5 @@
 import {Client} from "@notionhq/client";
+import {AppError} from "../errors";
 
 export interface GetNotionDatabaseRecordOptions {
   notionToken: string;
@@ -48,7 +49,11 @@ async function getDataSourceId(notion: Client): Promise<string> {
   });
 
   if (!("data_sources" in database) || !database.data_sources[0]) {
-    throw new Error("Notion database has no data sources");
+    throw new AppError({
+      code: "notion_data_source_missing",
+      message: "Notion database has no data sources",
+      statusCode: 502,
+    });
   }
 
   return database.data_sources[0].id;
@@ -97,7 +102,11 @@ function getTextProperty(property: NotionProperty | undefined): string | null {
  */
 function formatClaimRecord(record: NotionDatabaseRecord): NotionClaimRecord {
   if (!("properties" in record)) {
-    throw new Error("Notion returned a partial record without properties");
+    throw new AppError({
+      code: "notion_partial_record",
+      message: "Notion returned a partial record without properties",
+      statusCode: 502,
+    });
   }
 
   return {
@@ -115,8 +124,21 @@ export async function getNotionDatabaseRecord({
   notionToken,
   phoneNumber,
 }: GetNotionDatabaseRecordOptions): Promise<NotionClaimRecord | null> {
-  if (!notionToken) throw new Error("Missing Notion token");
-  if (!phoneNumber) throw new Error("Missing phone number");
+  if (!notionToken) {
+    throw new AppError({
+      code: "missing_notion_token",
+      message: "Missing Notion token",
+      statusCode: 500,
+    });
+  }
+
+  if (!phoneNumber) {
+    throw new AppError({
+      code: "missing_phone_number",
+      message: "Missing phone number",
+      statusCode: 400,
+    });
+  }
 
   const notion = new Client({auth: notionToken});
   const dataSourceId = await getDataSourceId(notion);

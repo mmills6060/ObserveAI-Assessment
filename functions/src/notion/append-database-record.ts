@@ -1,4 +1,5 @@
 import {Client} from "@notionhq/client";
+import {AppError} from "../errors";
 
 export interface AppendNotionDatabaseRecordOptions {
   notionToken: string;
@@ -25,16 +26,54 @@ export async function appendNotionDatabaseRecord({
   sentiment,
   timestamp,
 }: AppendNotionDatabaseRecordOptions): Promise<AppendedNotionDatabaseRecord> {
-  if (!notionToken) throw new Error("Missing Notion token");
-  if (!name) throw new Error("Missing name");
-  if (!summary) throw new Error("Missing summary");
-  if (!sentiment) throw new Error("Missing sentiment");
-  if (!timestamp) throw new Error("Missing timestamp");
+  if (!notionToken) {
+    throw new AppError({
+      code: "missing_notion_token",
+      message: "Missing Notion token",
+      statusCode: 500,
+    });
+  }
+
+  if (!name) {
+    throw new AppError({
+      code: "missing_name",
+      message: "Missing name",
+      statusCode: 400,
+    });
+  }
+
+  if (!summary) {
+    throw new AppError({
+      code: "missing_summary",
+      message: "Missing summary",
+      statusCode: 400,
+    });
+  }
+
+  if (!sentiment) {
+    throw new AppError({
+      code: "missing_sentiment",
+      message: "Missing sentiment",
+      statusCode: 400,
+    });
+  }
+
+  if (!timestamp) {
+    throw new AppError({
+      code: "missing_timestamp",
+      message: "Missing timestamp",
+      statusCode: 400,
+    });
+  }
 
   const parsedTimestamp = new Date(timestamp);
 
   if (Number.isNaN(parsedTimestamp.getTime())) {
-    throw new TypeError("Invalid timestamp");
+    throw new AppError({
+      code: "invalid_timestamp",
+      message: "Timestamp must be a valid date string",
+      statusCode: 422,
+    });
   }
 
   const notion = new Client({auth: notionToken});
